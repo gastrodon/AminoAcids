@@ -6,6 +6,9 @@ class Client:
     user_agent = "Dalvik/2.1.0 (Linux; U; Android 6.0; LG-UK495 Build/MRA58K; com.narvii.amino.master/2.0.24532)"
     device_id = "010E4A69D1B3066CA9A127890A5531929F3818F16BA22092D5A91DEFB2CB73F53648E28EFAB98A4B61"
     device_id_sig = "AbIkXPl49A/pCMJZGQtomJRFdHDg"
+
+
+
     def __init__(self, user_agent = user_agent, device_id = device_id, api = api):
         self.authenticated = False
         self.configured = False
@@ -19,33 +22,33 @@ class Client:
             "Accept-Encoding": "gzip"
         }
 
-        response = requests.get(f"{self.api}/g/s/auth/config", headers = headers, verify = False)
+        response = requests.get(f"{self.api}/g/s/auth/config", headers = headers)
         response_data = json.loads(response.text)
 
         if response.status_code is 200:
             self._config_json = response_data
             self.configured = True
         else:
-            raise exceptions.UnknownResponse(response.text)
+            raise exceptions.UnknownResponse
 
     def login(self, email, password):
 
         data = {
-            "email": "diekaffir@gmail.com",
+            "email": email,
             "v": 2,
-            "secret" : "0 rainbowdash",
-            "deviceID": "010E4A69D1B3066CA9A127890A5531929F3818F16BA22092D5A91DEFB2CB73F53648E28EFAB98A4B61",
+            "secret" : f"0 {password}",
+            "deviceID": self.device_id,
             "clientType": 100,
             "action": "normal",
-            "timestamp": 1557544303786
+            "timestamp": int(time.time() * 1000)
         }
 
         headers = {
-            "NDCDEVICEID" : "F",
-            "NDC-MSG-SIG": "F",
+            "NDCDEVICEID" : self.device_id,
+            "NDC-MSG-SIG": self.device_id_sig,
             "Accept-Language": "en-US",
             "Content-Type": "application/json; charset=utf-8",
-            "User-Agent" : "Dalvik/2.1.0 (Linux; U; Android 6.0; LG-UK495 Build/MRA58K; com.narvii.amino.master/2.0.24532)",
+            "User-Agent" : self.user_agent,
             "Host": "service.narvii.com",
             "Accept-Encoding": "gzip",
             "Content-Length": str(len(json.dumps(data))),
@@ -54,14 +57,18 @@ class Client:
         }
 
         response = requests.post(f"{self.api}/g/s/auth/login", data = json.dumps(data), headers = headers)
-        response_data = json.loads(response.text)
-
-        print(response.url)
-        print(response.text)
 
         if response.status_code == 200:
-            print("logged in")
+            self._handle_login()
+            self.authenticated = True
         if response.status_code == 400 and response_data["api:statuscode"] == 200:
-            raise(exceptions.FailedLogin)
+            raise exceptions.FailedLogin
         else:
-            raise exceptions.UnknownResponse(response.text)
+            raise exceptions.UnknownResponse
+
+    def _handle_login(self, data):
+        self.uid = data["auid"]
+        self.secret = data["secret"]
+        self.sid = data["sid"]
+        self.profile = data["userProfile"]
+        self.nick = data["userProfile"]["nickname"]
