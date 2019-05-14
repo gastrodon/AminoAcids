@@ -4,26 +4,32 @@ from amino import chat
 from amino.lib.util import exceptions
 
 class Community:
-    def __init__(self, community):
-        self.name = community["name"]
-        self.endpoint = community["endpoint"]
-        self.url = community["link"]
-        self.id = community["ndcId"]
-        self.member_count = community["membersCount"]
+    def __init__(self, community_data):
+        """
+        Build the community
+        community_data: json info representing the community to be objectified
+        """
+        self.name = community_data["name"]
+        self.endpoint = community_data["endpoint"]
+        self.url = community_data["link"]
+        self.id = community_data["ndcId"]
+        self.member_count = community_data["membersCount"]
 
     def __repr__(self):
+        """
+        Represent the community with it's name
+        """
         return f"{self.name}"
 
 class Peer:
-    def __init__(self, user_data, client, community_obj = None, community_data = None):
+    def __init__(self, user_data, client, community_obj):
         """
         Build the peer.
         user_data: json representing the peer
         client: logged in client or sub_client who the peer belongs to
-        community_data: json info representing the community that the peer is attached to
-        community_obj: an object representing the community that the peer is attached to. Takes precedence over community_data
+        community_obj: an object representing the community that the peer is attached to
         """
-        self.community = community_obj if community_obj else Community(community_data) if community_data else None
+        self.community = community_obj
         self.client = client
         self.uid = user_data["uid"]
         self.nick = user_data["nickname"]
@@ -34,6 +40,13 @@ class Peer:
         Represent the client with it's nickname
         """
         return self.nick
+
+    def set_community_obj(self, community_obj):
+        """
+        Set a community object after the fact
+        """
+        self.community = community_obj
+        return self
 
     def get_pm_thread(self, lazy = True):
         """
