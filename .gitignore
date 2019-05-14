@@ -1,1 +1,5 @@
 ignore
+__*
+venv
+*.json
+test*
