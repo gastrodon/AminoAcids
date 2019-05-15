@@ -1,19 +1,32 @@
 import requests, json
 from time import time
-from amino import chat
 from amino.lib.util import exceptions
+from amino.abstract.base import ABCCommunity, ABCPeer, ABCChatThread
 
-class Community:
+class Community(ABCCommunity):
     def __init__(self, community_data):
         """
         Build the community
         community_data: json info representing the community to be objectified
         """
+        self.api = "https://service.narvii.com/api/v1"
         self.name = community_data["name"]
         self.endpoint = community_data["endpoint"]
         self.url = community_data["link"]
         self.id = community_data["ndcId"]
-        self.member_count = community_data["membersCount"]
+
+    @property
+    def member_count(self):
+        """
+        Param: Get the number of members in this community
+        returns the member count for the community
+        """
+        response = requests.get(f"{self.api}/g/s-x{self.id}/community/info")
+
+        if response.status_code != 200:
+            raise exceptions.UnknownResponse
+
+        return json.loads(response.text)["community"]["membersCount"]
 
     def __repr__(self):
         """
@@ -21,7 +34,7 @@ class Community:
         """
         return f"{self.name}"
 
-class Peer:
+class Peer(ABCPeer):
     def __init__(self, user_data, client, community_obj):
         """
         Build the peer.
@@ -29,6 +42,7 @@ class Peer:
         client: logged in client or sub_client who the peer belongs to
         community_obj: an object representing the community that the peer is attached to
         """
+        self.api = "https://service.narvii.com/api/v1"
         self.community = community_obj
         self.client = client
         self.uid = user_data["uid"]
@@ -48,7 +62,7 @@ class Peer:
         self.community = community_obj
         return self
 
-    def get_pm_thread(self, lazy = True):
+    def get_pm_thread(self):
         """
         Request the pm channel for a peer from amino.
         If there is one (both users have accepted the chat) a Thread is returned
@@ -66,14 +80,14 @@ class Peer:
         response = requests.get(f"{self.client.api}/x{self.community.id}/s/chat/thread", params = params, headers = headers)
 
         if response.status_code == 200:
-            return chat.Thread(json.loads(response.text)["threadList"][0], self.client, lazy = lazy)
+            return ChatThread(json.loads(response.text)["threadList"][0], self.client)
 
-        if json.loads(response).get("api:statuscode", False) == 1600:
+        elif json.loads(response.text).get("api:statuscode", False) == 1600:
             return None
 
         else: raise exceptions.UnknownResponse
 
-    def open_thread(self, message = None):
+    def request_chat(self, message = None):
         """
         Ask a user to open a chat with them.
         message: message to send with the request, or None
@@ -95,6 +109,9 @@ class Peer:
 
         response = requests.post(f"{self.client.api}/x{self.community.id}/s/chat/thread", data = data, headers = headers)
 
+        if response["api:statuscode"] == 1611:
+            raise exceptions.ChatRequestsBlocked
+
         return response
 
     def send_text_message(self, message, allow_new = True):
@@ -104,6 +121,14 @@ class Peer:
         allow_new: if there is no open thread we will send an open_thread request
         """
         thread = self.get_pm_thread()
+
+        if not thread:
+            print("not thread")
+            if allow_new:
+                print("allow new")
+                return self.request_chat(message = message)
+            print("not allow new")
+            raise exceptions.NoChatThread
 
         return thread.send_text_message(message)
 
@@ -123,6 +148,58 @@ class Peer:
 
         return requests.post(
             f"{self.client.api}/x{self.community.id}/s/chat/thread/{self.uid}/message",
+            data = data,
+            headers = headers
+        )
+
+class ChatThread(ABCChatThread):
+    def __init__(self, data, client):
+        """
+        Build the client.
+        """
+
+        self.api = "https://service.narvii.com/api/v1"
+        self.client = client
+        self.uid = data["threadId"]
+        self._community_id = data["ndcId"]       # fetch community info somehow and generate a Community object
+        self._members_data = data["membersSummary"]   # create a Peer object for each item in the list
+        self.member_count = len(self._members_data)
+
+    def __repr__(self):
+        return self.uid
+
+    @property
+    def community(self):
+        response = requests.get(f"{self.api}/g/s-x{self._community_id}/community/info")
+
+        if response.status_code != 200:
+            raise exceptions.UnknownResponse
+
+        response = json.loads(response.text)
+        return Community(response["community"])
+
+    @property
+    def members(self):
+        _members = [Peer(self._members_data[index], self.client, self.community) for index in range(len(self._members_data))]
+        return list(filter(lambda x: x.uid != self.client.uid, _members))
+
+    def send_text_message(self, message):
+        timestamp = int(time() * 1000)
+
+        data = json.dumps({
+            "type": 0,
+            "content": message,
+            "attachedObject": None,
+            "timestamp": timestamp,
+            "clientRefId": int(timestamp / 10 % 1000000000)
+        })
+
+        headers = self.client.headers(data)
+
+        self.h, self.d = headers, data
+
+        return requests.post(
+            f"{self.client.api}/x{self._community_id}/s/chat/thread/{self.uid}/message",
             data = data,
             headers = headers
         )

@@ -1,10 +1,11 @@
 import requests, json, os
 from locale import getdefaultlocale as locale
 from time import time, timezone
-from amino import community
+from amino import community, media
 from amino.lib.util import exceptions, helpers
+from amino.abstract.base import ABCClient
 
-class Client:
+class Client(ABCClient):
     def __init__(self, path = "device.json"):
         """
         Build the client.
@@ -86,7 +87,7 @@ class Client:
 
         return headers
 
-    def login(self, email, password):
+    def login(self, email: str, password: str):
         """
         Send a login request to Amino
         email: emial address associated with the account
@@ -146,7 +147,7 @@ class Client:
 
         for data in response["communityList"]:
             profile = response["userInfoInCommunities"][str(data["ndcId"])]["userProfile"]
-            clients[data["endpoint"]] = SubClient(profile, self.sid, community_data = data)
+            clients[data["endpoint"]] = SubClient(profile, self.sid, community.Community(data))
 
         return clients
 
@@ -155,7 +156,7 @@ class SubClient(Client):
     A representation of a user on an amino.
     This is different than the parent Client, as amino has different account info for each amino that a user has joined
     """
-    def __init__(self, user_data, sid, community_data = None, community_obj = None):
+    def __init__(self, user_data, sid, community_obj):
         """
         Build the client.
         user_data: json info with the user info to build the info from
@@ -167,7 +168,7 @@ class SubClient(Client):
         if not community and not community_data:
             raise exceptions.NoCommunity
 
-        self.community = community_obj if community_obj else community.Community(community_data)
+        self.community = community_obj
         self.uid = user_data["uid"]
         self.nick = user_data["nickname"]
         self.sid = sid
@@ -198,3 +199,95 @@ class SubClient(Client):
         response = json.loads(response.text)
 
         return [community.Peer(item, self, community_obj = self.community) for item in response["userProfileList"]]
+
+    def upload_image_path(self, path, type = None):
+        """
+        Upload an image that exists on the disk (by propogating the file data to upload_image_raw)
+        path: the path to the image, relative to wherever the library was imported from
+        type: filetype, defautls to the extension on the image
+        Returns the location of the image on amino's servers
+        """
+        if not type:
+            type = path.split('.')[-1]
+
+        raw_image = open(path, "rb").read()
+        return self.upload_iamge_raw(raw_image, type = type)
+
+    def upload_image_raw(self, data, type = "jpg"):
+        """
+        Upload raw image data to amino.
+        data: raw data of the file
+        type: filetype, defaults to jpg
+        Returns the location of the image on amono's servers
+        """
+        headers = self.headers(data)
+        headers["Content-Type"] = f"image/{type}"
+        response = requests.post(f"{self.api}/g/s/media/upload", data = data, headers = headers)
+
+        if response.status_code != 200:
+            raise exceptions.UnknownResponse
+
+        return json.loads(response.text)["mediaValue"]
+
+    def post_blog(self, title, body, *media):
+        """
+        Create a blog on this client's amino community.
+        title: title of the blog
+        body: text body of the blog, including replace_strings (see below)
+        media: an arbitrary number of MediaItems that will be posted along with the blog
+        Will return a post object (or raise an error) when I make one, but for now it returns the request response data
+        """
+        timestamp = int(time() * 1000)
+
+        if media:
+            media_list = []
+            for item in media:
+                body = body.replace(item.replace_key, f"[IMG={item.replace_key}]")
+                media_list.append(item.media_list_item)
+
+        else:
+            media_list = None
+
+        data = json.dumps({
+            "extensions": {
+                "fansOnly": False
+            },
+            "address": None,
+            "content": body,
+            "mediaList": media_list,
+            "title": title,
+            "latitude": 0,
+            "longitude": 0,
+            "eventSource": "GlobalComposeMenu",
+            "timestamp": timestamp
+        })
+
+        headers = self.headers(data)
+
+        return requests.post(f"{self.api}/x{self.community.id}/s/blog", headers = headers, data = data)
+
+    @property
+    def chat_threads(self):
+        """
+        Get a list of the threads that this client is a part of
+        returns a list of Thread objects
+        """
+        params = {
+            "type": "joined-me",
+            "start": 0,
+        }
+
+        headers = self.headers()
+
+        response = requests.get(f"{self.api}/x{self.community.id}/s/chat/thread", params = params, headers = headers)
+
+        if response.status_code != 200:
+            raise UnknownResponse # placeholder
+
+        response = json.loads(response.text)["threadList"]
+
+        return [community.ChatThread(response[index], self) for index in range(len(response))]
+
+    @property
+    def private_chat_threads(self):
+        return self.chat_threads()
