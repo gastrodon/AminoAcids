@@ -121,9 +121,9 @@ class Client(ABCClient):
         self.sid = response["sid"]
         self.profile = response["userProfile"]
         self.nick = response["userProfile"]["nickname"]
-        self.sub_clients = self.get_sub_clients()
 
-    def get_sub_clients(self):
+    @property
+    def sub_clients(self):
         """
         Generates a dict of SubClients that this client owns.
         returns a dict with endpoint:SubClient objects
@@ -150,6 +150,35 @@ class Client(ABCClient):
             clients[data["endpoint"]] = SubClient(profile, self.sid, community.Community(data))
 
         return clients
+
+    def upload_image_path(self, path, type = None):
+        """
+        Upload an image that exists on the disk (by propogating the file data to upload_image_raw)
+        path: the path to the image, relative to wherever the library was imported from
+        type: filetype, defautls to the extension on the image
+        Returns the location of the image on amino's servers
+        """
+        if not type:
+            type = path.split('.')[-1]
+
+        raw_image = open(path, "rb").read()
+        return self.upload_iamge_raw(raw_image, type = type)
+
+    def upload_image_raw(self, data, type = "jpg"):
+        """
+        Upload raw image data to amino.
+        data: raw data of the file
+        type: filetype, defaults to jpg
+        Returns the location of the image on amono's servers
+        """
+        headers = self.headers(data)
+        headers["Content-Type"] = f"image/{type}"
+        response = requests.post(f"{self.api}/g/s/media/upload", data = data, headers = headers)
+
+        if response.status_code != 200:
+            raise exceptions.UnknownResponse
+
+        return json.loads(response.text)["mediaValue"]
 
 class SubClient(Client):
     """
@@ -199,35 +228,6 @@ class SubClient(Client):
         response = json.loads(response.text)
 
         return [community.Peer(item, self, community_obj = self.community) for item in response["userProfileList"]]
-
-    def upload_image_path(self, path, type = None):
-        """
-        Upload an image that exists on the disk (by propogating the file data to upload_image_raw)
-        path: the path to the image, relative to wherever the library was imported from
-        type: filetype, defautls to the extension on the image
-        Returns the location of the image on amino's servers
-        """
-        if not type:
-            type = path.split('.')[-1]
-
-        raw_image = open(path, "rb").read()
-        return self.upload_iamge_raw(raw_image, type = type)
-
-    def upload_image_raw(self, data, type = "jpg"):
-        """
-        Upload raw image data to amino.
-        data: raw data of the file
-        type: filetype, defaults to jpg
-        Returns the location of the image on amono's servers
-        """
-        headers = self.headers(data)
-        headers["Content-Type"] = f"image/{type}"
-        response = requests.post(f"{self.api}/g/s/media/upload", data = data, headers = headers)
-
-        if response.status_code != 200:
-            raise exceptions.UnknownResponse
-
-        return json.loads(response.text)["mediaValue"]
 
     def post_blog(self, title, body, *media):
         """
