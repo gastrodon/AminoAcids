@@ -1,5 +1,8 @@
 ignore
-__*
+__pycache__
 venv
 *.json
 test*
+build
+dist
+*.egg*
