@@ -1,9 +1,8 @@
 import requests, json
 from time import time
 from amino.lib.util import exceptions
-from amino.abstract.base import ABCCommunity, ABCPeer, ABCChatThread
 
-class Community(ABCCommunity):
+class Community():
     def __init__(self, community_data):
         """
         Build the community
@@ -34,7 +33,7 @@ class Community(ABCCommunity):
         """
         return f"{self.name}"
 
-class Peer(ABCPeer):
+class Peer():
     def __init__(self, user_data, client, community_obj):
         """
         Build the peer.
@@ -152,16 +151,15 @@ class Peer(ABCPeer):
             headers = headers
         )
 
-class ChatThread(ABCChatThread):
+class ChatThread():
     def __init__(self, data, client):
         """
         Build the client.
         """
-
         self.api = "https://service.narvii.com/api/v1"
         self.client = client
         self.uid = data["threadId"]
-        self._community_id = data["ndcId"]       # fetch community info somehow and generate a Community object
+        self._community_id = data["ndcId"]
         self._members_data = data["membersSummary"]   # create a Peer object for each item in the list
         self.member_count = len(self._members_data)
 

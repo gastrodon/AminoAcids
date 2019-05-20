@@ -1,8 +1,7 @@
 import requests
-from amino.abstract.base import ABCBlog, ABCMediaItem
 from amino.lib.util import exceptions
 
-class NewBlog(ABCBlog):
+class NewBlog():
     def __init__(self, title, body, client):
         """
         Build a new blog
@@ -12,7 +11,7 @@ class NewBlog(ABCBlog):
         self.body = body
         self.media_list = []
 
-class MediaItem(ABCMediaItem):
+class MediaItem():
     def __init__(self, client = None, replace_key = None, caption = None, filename = None,
     source_file = None, source_url = None, uploaded = None):
         """

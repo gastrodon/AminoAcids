@@ -1,12 +1,11 @@
 import requests, json, os
 from locale import getdefaultlocale as locale
 from time import time, timezone
-from amino import community, media
+from amino import community, media, socket
 from amino.lib.util import exceptions, helpers
-from amino.abstract.base import ABCClient
 
-class Client(ABCClient):
-    def __init__(self, path = "device.json"):
+class Client():
+    def __init__(self, path = "device.json", callback = None):
         """
         Build the client.
         path: optional location where the generated device info will be stored
@@ -15,13 +14,11 @@ class Client(ABCClient):
         try:
             with open(f"{path}", "r") as stream:
                 device_info = json.load(stream)
-            new_device = False
 
         except (FileNotFoundError, json.decoder.JSONDecodeError):
             device_info = helpers.generate_device_info()
             with open(f"{path}", "w") as stream:
                 json.dump(device_info, stream)
-            new_device = True
 
         self.api = "https://service.narvii.com/api/v1"
         self.authenticated = False
@@ -31,8 +28,61 @@ class Client(ABCClient):
         self.user_agent = device_info["user_agent"]
         self.device_id = device_info["device_id"]
         self.device_id_sig = device_info["device_id_sig"]
+        self.socket = socket.SocketHandler(self)
 
         self.client_config()
+
+    def login(self, email: str, password: str):
+        """
+        Send a login request to Amino
+        email: emial address associated with the account
+        password: password associated with the account
+        """
+        data = json.dumps({
+            "email": email,
+            "v": 2,
+            "secret": f"0 {password}",
+            "deviceID": self.device_id,
+            "clientType": 100,
+            "action": "normal",
+            "timestamp": int(time() * 1000)
+        })
+
+        headers = self.headers(data = data)
+        response = requests.post(f"{self.api}/g/s/auth/login", data = data, headers = headers)
+
+        if response.status_code == 400:
+            response = json.loads(response.text)
+
+            if response["api:statuscode"] == 200:
+                raise exceptions.FailedLogin
+
+            else:
+                raise exceptions.UnknownResponse
+
+        response = json.loads(response.text)
+        self.authenticated = True
+        self.uid = response["auid"]
+        self.secret = response["secret"]
+        self.sid = response["sid"]
+        self.profile = response["userProfile"]
+        self.nick = response["userProfile"]["nickname"]
+
+        self.socket.start()
+
+    def logout(self):
+        """
+        Send a logout request to amino
+        """
+        data = json.dumps({
+            "deviceID": self.device_id,
+            "clinetType": 100,
+            "timestamp": int(time() * 1000)
+        })
+
+        headers = self.headers(data)
+
+        return requests.post(f"{self.api}/g/s/auth/logout", data = data, headers = headers)
 
     def __repr__(self):
         """
@@ -86,41 +136,6 @@ class Client(ABCClient):
             headers["NDCAUTH"] = f"sid={self.sid}"
 
         return headers
-
-    def login(self, email: str, password: str):
-        """
-        Send a login request to Amino
-        email: emial address associated with the account
-        password: password associated with the account
-        """
-        data = json.dumps({
-            "email": email,
-            "v": 2,
-            "secret": f"0 {password}",
-            "deviceID": self.device_id,
-            "clientType": 100,
-            "action": "normal",
-            "timestamp": int(time() * 1000)
-        })
-
-        headers = self.headers(data = data)
-        response = requests.post(f"{self.api}/g/s/auth/login", data = data, headers = headers)
-
-        if response.status_code == 400:
-            response = json.loads(response.text)
-            if response["api:statuscode"] == 200:
-                raise exceptions.FailedLogin
-
-            else:
-                raise exceptions.UnknownResponse
-
-        response = json.loads(response.text)
-        self.authenticated = True
-        self.uid = response["auid"]
-        self.secret = response["secret"]
-        self.sid = response["sid"]
-        self.profile = response["userProfile"]
-        self.nick = response["userProfile"]["nickname"]
 
     @property
     def sub_clients(self):
