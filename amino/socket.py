@@ -17,11 +17,10 @@ class SocketHandler():
     def on_open(self):
         pass
 
-    def handle_message(self, message):
-        message = json.loads(message)
-        return self.handlers.get(message["t"], self.default_handler)(message)
+    def handle_message(self, data):
+        return self.client.handle_socket_message(data)
 
-    def default_handler(self, message):
+    def default_handler(self, data):
         print(f"Default handler called for t:{message['t']}")
 
     def send(self, data):
@@ -56,12 +55,10 @@ class Callbacks:
         This is meant to be subclassed
         """
         self.client = client
-        if not method_dict:
-            self.methods = {
-                1000: self.on_message_received
-            }
-        else:
-            self.methods = method_dict
+        
+        self.methods = {
+            1000: self.on_message_received
+        }
 
     def resolve(self, data):
         data = json.loads(data)

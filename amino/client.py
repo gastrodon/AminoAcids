@@ -5,7 +5,7 @@ from amino import community, media, socket
 from amino.lib.util import exceptions, helpers
 
 class Client():
-    def __init__(self, path = "device.json", callback = None):
+    def __init__(self, path = "device.json", callback = socket.Callbacks):
         """
         Build the client.
         path: optional location where the generated device info will be stored
@@ -29,6 +29,8 @@ class Client():
         self.device_id = device_info["device_id"]
         self.device_id_sig = device_info["device_id_sig"]
         self.socket = socket.SocketHandler(self)
+
+        self.callbacks = callback(self)
 
         self.client_config()
 
@@ -195,6 +197,9 @@ class Client():
 
         return json.loads(response.text)["mediaValue"]
 
+    def handle_socket_message(self, data):
+        return self.callbacks.resolve(data)
+
 class SubClient(Client):
     """
     A representation of a user on an amino.
@@ -280,6 +285,18 @@ class SubClient(Client):
         headers = self.headers(data)
 
         return requests.post(f"{self.api}/x{self.community.id}/s/blog", headers = headers, data = data)
+
+    def check_in(self):
+        data = json.dumps({
+            "timezone": -timezone // 1000,
+            "timestamp": int(time() * 1000)
+        })
+
+        headers = self.headers(data)
+
+        response = requests.post(f"{self.api}/x{self.community.id}/s/check-in", headers = headers, data = data)
+
+        return response
 
     @property
     def chat_threads(self):
