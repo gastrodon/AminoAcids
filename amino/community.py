@@ -3,16 +3,26 @@ from time import time
 from amino.lib.util import exceptions
 
 class Community():
+    api = "https://service.narvii.com/api/v1"
     def __init__(self, community_data):
         """
         Build the community
         community_data: json info representing the community to be objectified
         """
-        self.api = "https://service.narvii.com/api/v1"
+        self.api = Community.api
         self.name = community_data["name"]
         self.endpoint = community_data["endpoint"]
         self.url = community_data["link"]
         self.id = community_data["ndcId"]
+
+    @classmethod
+    def from_ndcid(cls, ndcid):
+        response = requests.get(f"{cls.api}/g/s-x{ndcid}/community/info")
+
+        if response.status_code != 200:
+            raise exceptions.UnknownResponse
+
+        return cls(json.loads(response))
 
     @property
     def member_count(self):
@@ -34,6 +44,7 @@ class Community():
         return f"{self.name}"
 
 class Peer():
+    api = "https://service.narvii.com/api/v1"
     def __init__(self, user_data, client, community_obj):
         """
         Build the peer.
@@ -41,7 +52,7 @@ class Peer():
         client: logged in client or sub_client who the peer belongs to
         community_obj: an object representing the community that the peer is attached to
         """
-        self.api = "https://service.narvii.com/api/v1"
+        self.api = Peer.api
         self.community = community_obj
         self.client = client
         self.uid = user_data["uid"]
@@ -143,8 +154,6 @@ class Peer():
 
         headers = self.client.headers(data)
 
-        self.h, self.d = headers, data
-
         return requests.post(
             f"{self.client.api}/x{self.community.id}/s/chat/thread/{self.uid}/message",
             data = data,
@@ -201,3 +210,40 @@ class ChatThread():
             data = data,
             headers = headers
         )
+
+class Message:
+    """
+    Build a message.
+    """
+    api = "https://service.narvii.com/api/v1"
+    def __init__(self, data, client):
+        self.client = client
+        self.uid = data["messageId"]
+        self.created = data["createdTime"]
+        self.content = data["content"]
+
+        self._community_id = data["author"]["ndcId"]
+        self._author = data["author"]
+        self._thread_id = data["uid"]
+
+    @property
+    def community(self):
+        return Community.from_ndcid(self._community_id)
+
+    @property
+    def author(self):
+        return Peer(self._author, client, self.community)
+
+    def mark_as_read(self):
+        timestamp = int(time() * 1000)
+        data = json.dumps({
+            "messageId": self.uid,
+            "createdTime": self.createdTime,
+            "timestamp": timestamp
+        })
+
+        headers = client.headers(data)
+
+        result = json.post(f"{self.api}/x{self._community_id}/chat/thread/{self._thread_id}/mark-as-read", headers = headers, data = data)
+
+        return result

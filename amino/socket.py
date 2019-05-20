@@ -42,6 +42,7 @@ class SocketHandler():
         self.socket_thread = threading.Thread(target = self.socket.run_forever)
         self.socket_thread.start()
         self.active = True
+        print("starting the socket")
 
     def close(self):
         self.socket.close()
@@ -55,7 +56,7 @@ class Callbacks:
         This is meant to be subclassed
         """
         self.client = client
-        
+
         self.methods = {
             1000: self.on_message_received
         }
