@@ -133,11 +133,8 @@ class Peer():
         thread = self.get_pm_thread()
 
         if not thread:
-            print("not thread")
             if allow_new:
-                print("allow new")
                 return self.request_chat(message = message)
-            print("not allow new")
             raise exceptions.NoChatThread
 
         return thread.send_text_message(message)
@@ -203,8 +200,6 @@ class ChatThread():
 
         headers = self.client.headers(data)
 
-        self.h, self.d = headers, data
-
         return requests.post(
             f"{self.client.api}/x{self._community_id}/s/chat/thread/{self.uid}/message",
             data = data,
@@ -224,7 +219,7 @@ class Message:
 
         self._community_id = data["author"]["ndcId"]
         self._author = data["author"]
-        self._thread_id = data["uid"]
+        self._thread_id = data["threadId"]
 
     @property
     def community(self):
@@ -234,16 +229,67 @@ class Message:
     def author(self):
         return Peer(self._author, client, self.community)
 
+    def mark_as_delivered(self):
+        timestamp = int(time() * 1000)
+
+        ws_data = json.dumps({
+            "o": {
+              "ndcId": self._community_id,
+              "threadId": self._thread_id,
+              "messageId": self.uid,
+              "markHasRead": False,
+              "createdTime": self.created,
+              "id": str(int(time() % 100000000 / 1.5))
+            },
+            "t": 1001
+        })
+
+        self.client.socket.send(ws_data)
+
     def mark_as_read(self):
         timestamp = int(time() * 1000)
+
+        ws_data = json.dumps({
+            "o": {
+                "ndcId": self._community_id,
+                "threadId": self._thread_id,
+                "messageId": self.uid,
+                "markHasRead": True,
+                "createdTime": self.created,
+                "id": str(int(time() % 100000000 / 1.5))
+            },
+            "t": 1001
+        })
+
+        self.client.socket.send(ws_data)
+
         data = json.dumps({
             "messageId": self.uid,
-            "createdTime": self.createdTime,
+            "createdTime": self.created,
             "timestamp": timestamp
         })
 
-        headers = client.headers(data)
+        headers = self.client.headers(data)
 
-        result = json.post(f"{self.api}/x{self._community_id}/chat/thread/{self._thread_id}/mark-as-read", headers = headers, data = data)
+        result = requests.post(f"{self.api}/x{self._community_id}/s/chat/thread/{self._thread_id}/mark-as-read", headers = headers, data = data)
 
         return result
+
+    def reply(self, message):
+        timestamp = int(time() * 1000)
+
+        data = json.dumps({
+            "type": 0,
+            "content": message,
+            "attachedObject": None,
+            "timestamp": timestamp,
+            "clientRefId": int(timestamp / 10 % 1000000000)
+        })
+
+        headers = self.client.headers(data)
+
+        return requests.post(
+            f"{self.client.api}/x{self._community_id}/s/chat/thread/{self._thread_id}/message",
+            data = data,
+            headers = headers
+        )

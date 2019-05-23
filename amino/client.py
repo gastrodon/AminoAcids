@@ -5,7 +5,7 @@ from amino import community, media, socket
 from amino.lib.util import exceptions, helpers
 
 class Client():
-    def __init__(self, path = "device.json", callback = socket.Callbacks):
+    def __init__(self, path = "device.json", callback = socket.Callbacks, socket_trace = False):
         """
         Build the client.
         path: optional location where the generated device info will be stored
@@ -28,7 +28,7 @@ class Client():
         self.user_agent = device_info["user_agent"]
         self.device_id = device_info["device_id"]
         self.device_id_sig = device_info["device_id_sig"]
-        self.socket = socket.SocketHandler(self)
+        self.socket = socket.SocketHandler(self, socket_trace = socket_trace)
 
         self.callbacks = callback(self)
 
