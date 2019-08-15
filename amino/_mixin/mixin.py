@@ -165,3 +165,10 @@ class ObjectMixin(MainMixin):
         Alias for ``ObjectMixin.client.headers``
         """
         return self.client.headers
+
+    @property
+    def api(self):
+        """
+        Alias for ``ObjectMixin.client.api``
+        """
+        return self.client.api
